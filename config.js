@@ -8,7 +8,8 @@ const WIKIS = {
         apiEndpoint: "https://doorsgame.wiki/w/api.php",
         articlePath: "https://doorsgame.wiki/",
         prefix: "en",
-        emoji: "1557256172782878780"
+        emoji: "1557256172782878780",
+        default: true
     },
     "zh": {
         name: "Chinese DOORS Wiki",
@@ -25,8 +26,6 @@ const WIKI_MAP = {
     "1018420502286581815": "en"
 };
 
-const DEFAULT_WIKI = "en";
-
 // Enable or disable slash commands. Disabled commands are not registered with Discord.
 const COMMANDS = {
     speedrun: false,
@@ -37,8 +36,11 @@ const COMMANDS = {
     random: true,
 };
 
-// const SPEEDRUN_EMOJI = "DISCORD_EMOJI_ID";
-const CONTRIBSCORES_SCORE_EMOJI = "1557256374881095711";
+const EMOJIS = {
+    contribs: "1557256374881095711"
+};
+
+const WEB_SERVER = true;
 
 const STATUS_INTERVAL_MS = 5 * 60 * 1000;
 const PAGE_CACHE_MS = 30 * 60 * 1000;
@@ -56,11 +58,10 @@ const STATUS_OPTIONS = [
 module.exports = {
     BOT_NAME,
     WIKIS,
-    WIKI_MAP,
-    DEFAULT_WIKI,
+    WIKI_MAP: typeof WIKI_MAP !== "undefined" ? WIKI_MAP : undefined,
     COMMANDS,
-//    SPEEDRUN_EMOJI,
-    CONTRIBSCORES_SCORE_EMOJI,
+    EMOJIS,
+    WEB_SERVER,
     STATUS_INTERVAL_MS,
     PAGE_CACHE_MS,
     STATUS_OPTIONS
