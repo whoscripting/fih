@@ -36,6 +36,8 @@ const COMMANDS = {
     random: true,
 };
 
+const INLINE_TEXT = true;
+
 const EMOJIS = {
     contribs: "1557256374881095711"
 };
@@ -60,6 +62,7 @@ module.exports = {
     WIKIS,
     WIKI_MAP: typeof WIKI_MAP !== "undefined" ? WIKI_MAP : undefined,
     COMMANDS,
+    INLINE_TEXT,
     EMOJIS,
     WEB_SERVER,
     STATUS_INTERVAL_MS,
