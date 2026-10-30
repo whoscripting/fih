@@ -28,7 +28,7 @@ const WIKI_MAP = {
 
 // Enable or disable slash commands. Disabled commands are not registered with Discord.
 const COMMANDS = {
-    speedrun: false,
+    speedrun: true,
     contribs: false,
     wiki: true,
     parse: true,
