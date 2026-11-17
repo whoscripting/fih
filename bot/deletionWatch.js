@@ -5,15 +5,17 @@
 //   1. On bot ready (and then every DELETION_CHECK_INTERVAL_MS), it asks the
 //      MediaWiki API for the current members of Category:Candidates_for_deletion.
 //   2. It diffs the members against a small JSON state file (gitignored).
-//      Anything that was not in the previous check counts as new. The first
-//      run seeds the state file silently so existing candidates are not
-//      re-announced as "new".
+//      Anything that was not in the previous check counts as new. On a fresh
+//      deployment (no state file) every current member counts as new, so the
+//      first check is sent immediately; later checks run every DELETION_CHECK_INTERVAL_MS.
 //   3. For each new page it fetches the rendered page HTML and reads the
 //      reason from `.notice-template .doorswiki-deletion-reason`.
 //   4. MediaWiki formatting inside the reason (bold, italic, links, code, ...)
 //      rendered as HTML is converted to Discord markdown.
 //   5. One message (chunked to respect Discord's 2000 char limit) is sent to
-//      DELETION_CHANNEL_ID. Mentions are disabled so wiki text cannot ping.
+//      DELETION_CHANNEL_ID. When DELETION_ROLE_PING is set, the message starts
+//      with a "-# <@&role>" subtext line and is sent silently
+//      (MessageFlags.SuppressNotifications). Wiki text can never ping anyone.
 
 const fs = require("fs");
 const path = require("path");
@@ -21,20 +23,40 @@ const cheerio = require("cheerio");
 
 const { fetch } = require("../functions/utils.js");
 const { getBotName } = require("./name.js");
+const { MessageFlags } = require("discord.js");
 const {
     WIKIS,
     DELETION_CHANNEL_ID,
     DELETION_CHECK_INTERVAL_MS,
+    DELETION_ROLE_PING,
 } = require("../config.js");
 
 const CATEGORY_TITLE = "Category:Candidates_for_deletion";
 const STATE_FILE = path.join(__dirname, "..", "deletion-watch-state.json");
 const MAX_MESSAGE_LENGTH = 2000;
+const HEADER = "## New pages for deletion";
 
 const getBotUserAgent = () => `${getBotName()} Discord bot`;
 
 function getDefaultWiki() {
     return Object.values(WIKIS).find(wiki => wiki.default) || Object.values(WIKIS)[0];
+}
+
+// Normalizes DELETION_ROLE_PING to the "<@&id>" form. Accepts "1570491422321148044",
+// "<@&1570491422321148044>" and similar; returns null when the config is unset/empty.
+function normalizeRolePing(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return null;
+    if (raw.includes("<@&")) return raw;
+    return `<@&${raw}>`;
+}
+
+function rolePingId(rolePing) {
+    return rolePing?.match(/\d+/)?.[0] || null;
+}
+
+function buildHeader(rolePing) {
+    return rolePing ? `-# ${rolePing}\n${HEADER}` : HEADER;
 }
 
 // --- STATE FILE ---
@@ -228,14 +250,9 @@ async function checkForNewCandidates(client) {
     const titles = members.map(member => member.title);
     const state = loadState();
 
-    if (!state) {
-        // First run: seed the state file without announcing the current backlog.
-        console.log(`deletionWatch: seeded state with ${titles.length} existing candidate(s).`);
-        saveState(titles);
-        return;
-    }
-
-    const previous = new Set(state.members);
+    // No state file means a fresh deployment: every current member counts as new,
+    // so the first check is sent immediately instead of seeding silently.
+    const previous = new Set(state?.members || []);
     const newMembers = members.filter(member => !previous.has(member.title));
 
     if (newMembers.length === 0) {
@@ -262,10 +279,16 @@ async function checkForNewCandidates(client) {
         return;
     }
 
-    for (const message of chunkMessages("New pages for deletion:", lines)) {
+    const rolePing = normalizeRolePing(DELETION_ROLE_PING);
+    const roleId = rolePingId(rolePing);
+    // Mentions are disabled so wiki text cannot ping anyone; only the configured
+    // role may be mentioned, and even then the message is sent silently.
+    const allowedMentions = roleId ? { parse: [], roles: [roleId] } : { parse: [] };
+    const sendOptions = rolePing ? { flags: [MessageFlags.SuppressNotifications] } : {};
+
+    for (const message of chunkMessages(buildHeader(rolePing), lines)) {
         try {
-            // Wiki text is user input; never let it ping anyone.
-            await channel.send({ content: message, allowedMentions: { parse: [] } });
+            await channel.send({ content: message, allowedMentions, ...sendOptions });
         } catch (err) {
             console.error("deletionWatch: failed to send message:", err.message);
         }
@@ -294,4 +317,6 @@ module.exports = {
     buildLine,
     displayTitle,
     chunkMessages,
+    normalizeRolePing,
+    buildHeader,
 };

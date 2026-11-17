@@ -59,6 +59,7 @@ Most bot behavior is configured in [`config.js`](config.js). Restart the bot aft
 | `WEB_SERVER` | Starts the small status web server when `true`. Set it to `false` to disable the server; `PORT` is then not required. |
 | `DELETION_CHANNEL_ID` | Channel the bot posts newly added candidates from `Category:Candidates_for_deletion` to. Set to an empty value to disable the watcher. |
 | `DELETION_CHECK_INTERVAL_MS` | How often the deletion watcher checks the category. The default is five minutes. |
+| `DELETION_ROLE_PING` | Optional. When set (`<@&role_id>` or a bare role ID), new candidate messages start with a silent `-# <@&role_id>` subtext line and are sent with notifications suppressed. Leave empty to disable. |
 | `STATUS_OPTIONS` | Customizes the bot’s rotating Discord status messages and activity types. |
 | `STATUS_INTERVAL_MS` | Controls how often the bot rotates its status. The default is five minutes. |
 | `PAGE_CACHE_MS` | Controls how long page lookups stay cached in memory. The default is 30 minutes. |
@@ -71,16 +72,18 @@ When adding a wiki, add its configuration to `WIKIS` and update `WIKI_MAP` or th
 
 `bot/deletionWatch.js` watches the default wiki's `Category:Candidates_for_deletion`. On startup and then every `DELETION_CHECK_INTERVAL_MS` (five minutes by default), it asks the MediaWiki API for the category's current members and compares them with the previous check, stored in `deletion-watch-state.json` (gitignored). Any member that wasn't present in the last check is treated as new.
 
-New candidates are posted to the channel configured with `DELETION_CHANNEL_ID` in this shape:
+New candidates are posted to the channel configured with `DELETION_CHANNEL_ID`. With `DELETION_ROLE_PING` set, the message is sent silently (`SuppressNotifications`) and looks like this:
 
 ```
-New pages for deletion:
+-# <@&1570491422321148044>
+## New pages for deletion
 * **[Icon lighter2.png](<https://doorsgame.wiki/wiki/File:Icon_lighter2.png>)** [(delete)](<https://doorsgame.wiki/wiki/File:Icon_lighter2.png?action=delete>) — Duplicate file.
 ```
 
-Notes:
+Without `DELETION_ROLE_PING`, the `-#` line is omitted and the message starts with `## New pages for deletion`. Notes:
 
-- The first run only seeds the state file; the existing backlog is not re-announced as new. Pages removed from the category and later re-added are announced again.
+- On a fresh deployment (no state file yet), the first check is sent immediately with all current candidates; later checks run every `DELETION_CHECK_INTERVAL_MS`. Pages removed from the category and later re-added are announced again.
+- When the role ping is configured, only that role may be mentioned (`allowedMentions: { roles: [roleId] }`); wiki text can never ping anyone.
 - The reason is read from the `.notice-template .doorswiki-deletion-reason` element on each page. MediaWiki rendering (bold, italic, strikethrough, code, links) is converted to Discord markdown; anything else is flattened to plain text.
 - The link text strips the namespace prefix (e.g. `File:Icon lighter2.png` shows as `Icon lighter2.png`); links themselves point at the full page.
 - Mentions in wiki text are dropped (`allowedMentions: { parse: [] }`) so a reason can never ping a channel, and messages are chunked to stay under Discord's 2000 character limit.

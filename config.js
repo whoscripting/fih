@@ -47,6 +47,9 @@ const WEB_SERVER = true;
 // Posts newly added candidates from Category:Candidates_for_deletion to this Discord channel.
 const DELETION_CHANNEL_ID = "1018420502701805590";
 const DELETION_CHECK_INTERVAL_MS = 5 * 60 * 1000;
+// Optional role shown as a silent "-# <@&role>" subtext line above new candidate messages.
+// Accepts "<@&role_id>" or a bare role ID; leave empty to disable.
+const DELETION_ROLE_PING = "<@&1570491422321148044>";
 
 const STATUS_INTERVAL_MS = 5 * 60 * 1000;
 const PAGE_CACHE_MS = 30 * 60 * 1000;
@@ -71,6 +74,7 @@ module.exports = {
     WEB_SERVER,
     DELETION_CHANNEL_ID,
     DELETION_CHECK_INTERVAL_MS,
+    DELETION_ROLE_PING,
     STATUS_INTERVAL_MS,
     PAGE_CACHE_MS,
     STATUS_OPTIONS
