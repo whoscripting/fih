@@ -57,6 +57,8 @@ Most bot behavior is configured in [`config.js`](config.js). Restart the bot aft
 | `INLINE_TEXT` | Enables parsing inline wiki syntax such as `[[Page]]` and `{{Template}}`. Set it to `false` to disable those message triggers while keeping slash commands available. |
 | `EMOJIS` | Optional feature emojis: `speedrun` is used on speedrun buttons and `contribs` is used in contribution score leaderboards. Leave either value empty or unset to omit that emoji. |
 | `WEB_SERVER` | Starts the small status web server when `true`. Set it to `false` to disable the server; `PORT` is then not required. |
+| `DELETION_CHANNEL_ID` | Channel the bot posts newly added candidates from `Category:Candidates_for_deletion` to. Set to an empty value to disable the watcher. |
+| `DELETION_CHECK_INTERVAL_MS` | How often the deletion watcher checks the category. The default is five minutes. |
 | `STATUS_OPTIONS` | Customizes the bot’s rotating Discord status messages and activity types. |
 | `STATUS_INTERVAL_MS` | Controls how often the bot rotates its status. The default is five minutes. |
 | `PAGE_CACHE_MS` | Controls how long page lookups stay cached in memory. The default is 30 minutes. |
@@ -64,6 +66,25 @@ Most bot behavior is configured in [`config.js`](config.js). Restart the bot aft
 Messages can also use interwiki links configured by the channel’s wiki, such as `[[wikipedia:Chicken]]` or `[[commons:Main page]]`. The bot reads the source wiki’s MediaWiki interwiki map, verifies that the destination page exists through its API, and then creates the usual extract embed with a link to the destination wiki. Prefixes configured in `config.js` take precedence over interwiki prefixes.
 
 When adding a wiki, add its configuration to `WIKIS` and update `WIKI_MAP` or the relevant status messages as needed. Discord channel, category, and emoji IDs can be copied using Discord’s Developer Mode. Emoji values are optional; unset values are omitted from buttons and contribution score lists.
+
+## Deletion watcher
+
+`bot/deletionWatch.js` watches the default wiki's `Category:Candidates_for_deletion`. On startup and then every `DELETION_CHECK_INTERVAL_MS` (five minutes by default), it asks the MediaWiki API for the category's current members and compares them with the previous check, stored in `deletion-watch-state.json` (gitignored). Any member that wasn't present in the last check is treated as new.
+
+New candidates are posted to the channel configured with `DELETION_CHANNEL_ID` in this shape:
+
+```
+New pages for deletion:
+* **[Icon lighter2.png](<https://doorsgame.wiki/wiki/File:Icon_lighter2.png>)** [(delete)](<https://doorsgame.wiki/wiki/File:Icon_lighter2.png?action=delete>) — Duplicate file.
+```
+
+Notes:
+
+- The first run only seeds the state file; the existing backlog is not re-announced as new. Pages removed from the category and later re-added are announced again.
+- The reason is read from the `.notice-template .doorswiki-deletion-reason` element on each page. MediaWiki rendering (bold, italic, strikethrough, code, links) is converted to Discord markdown; anything else is flattened to plain text.
+- The link text strips the namespace prefix (e.g. `File:Icon lighter2.png` shows as `Icon lighter2.png`); links themselves point at the full page.
+- Mentions in wiki text are dropped (`allowedMentions: { parse: [] }`) so a reason can never ping a channel, and messages are chunked to stay under Discord's 2000 character limit.
+- The bot account still needs permission to view and send messages in `DELETION_CHANNEL_ID`. Deleting the pages themselves is a manual action; the bot only links to `?action=delete`.
 
 ## Web server and Instatus
 

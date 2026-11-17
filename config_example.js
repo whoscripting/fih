@@ -34,6 +34,11 @@ const EMOJIS = {
     contribs: ""
 };
 const WEB_SERVER = true;
+
+// Channel ID to post newly added candidates from Category:Candidates_for_deletion to.
+const DELETION_CHANNEL_ID = "your_channel_id_here";
+const DELETION_CHECK_INTERVAL_MS = 5 * 60 * 1000;
+
 const STATUS_INTERVAL_MS = 5 * 60 * 1000;
 const PAGE_CACHE_MS = 30 * 60 * 1000;
 
@@ -50,6 +55,8 @@ module.exports = {
     INLINE_TEXT,
     EMOJIS,
     WEB_SERVER,
+    DELETION_CHANNEL_ID,
+    DELETION_CHECK_INTERVAL_MS,
     STATUS_INTERVAL_MS,
     PAGE_CACHE_MS,
     STATUS_OPTIONS

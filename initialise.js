@@ -1,6 +1,7 @@
 require("dotenv").config();
 
 const { setRandomStatus } = require("./bot/presence.js");
+const { startDeletionWatch } = require("./bot/deletionWatch.js");
 const { commands } = require("./bot/commands.js");
 const { 
     handleInteraction,
@@ -53,6 +54,7 @@ client.once("ready", async () => {
     setDiscordBotName(client.user.username);
     setRandomStatus(client);
     setInterval(() => { setRandomStatus(client); }, STATUS_INTERVAL_MS);
+    startDeletionWatch(client);
 
     try {
         console.log("Registering slash commands...");
