@@ -57,7 +57,7 @@ Most bot behavior is configured in [`config.js`](config.js). Restart the bot aft
 | `INLINE_TEXT` | Enables parsing inline wiki syntax such as `[[Page]]` and `{{Template}}`. Set it to `false` to disable those message triggers while keeping slash commands available. |
 | `EMOJIS` | Optional feature emojis: `speedrun` is used on speedrun buttons and `contribs` is used in contribution score leaderboards. Leave either value empty or unset to omit that emoji. |
 | `WEB_SERVER` | Starts the small status web server when `true`. Set it to `false` to disable the server; `PORT` is then not required. |
-| `DELETION_CHANNEL_ID` | Channel the bot posts newly added candidates from `Category:Candidates_for_deletion` to. Set to an empty value to disable the watcher. |
+| `DELETION_CHANNEL_ID` | Channel the bot posts newly added candidates from `Category:Candidates_for_deletion` to. Accepts a text channel, or a forum channel (a dedicated "New pages for deletion" post is created/reused and notifications go there). Set to an empty value to disable the watcher. |
 | `DELETION_CHECK_INTERVAL_MS` | How often the deletion watcher checks the category. The default is five minutes. |
 | `DELETION_ROLE_PING` | Optional. When set (`<@&role_id>` or a bare role ID), new candidate messages include a silent `-# <@&role_id>` subtext line below the heading and are sent with notifications suppressed. Leave empty to disable. |
 | `STATUS_OPTIONS` | Customizes the bot’s rotating Discord status messages and activity types. |
@@ -74,7 +74,7 @@ When adding a wiki, add its configuration to `WIKIS` and update `WIKI_MAP` or th
 
 `bot/deletionWatch.js` watches the default wiki's `Category:Candidates_for_deletion`. On startup and then every `DELETION_CHECK_INTERVAL_MS` (five minutes by default), it asks the MediaWiki API for the category's current members and compares them with the previous check, stored in `deletion-watch-state.json` (gitignored). Any member that wasn't present in the last check is treated as new.
 
-New candidates are posted to the channel configured with `DELETION_CHANNEL_ID`. With `DELETION_ROLE_PING` set, the message is sent silently (`SuppressNotifications`) and looks like this:
+New candidates are posted to the channel configured with `DELETION_CHANNEL_ID` (or its dedicated forum post — see below). With `DELETION_ROLE_PING` set, the message is sent silently (`SuppressNotifications`) and looks like this:
 
 ```
 ## New pages for deletion
@@ -89,7 +89,8 @@ Without `DELETION_ROLE_PING`, the `-#` line is omitted and the message starts wi
 - When the role ping is configured, only that role may be mentioned (`allowedMentions: { roles: [roleId] }`); wiki text can never ping anyone.
 - The reason is read from the `.notice-template .doorswiki-deletion-reason` element on each page. MediaWiki rendering (bold, italic, strikethrough, code, links) is converted to Discord markdown; anything else is flattened to plain text.
 - The link text strips the namespace prefix (e.g. `File:Icon lighter2.png` shows as `Icon lighter2.png`); links themselves point at the full page.
-- Mentions in wiki text are dropped (`allowedMentions: { parse: [] }`) so a reason can never ping a channel, and messages are chunked to stay under Discord's 2000 character limit.
+- Mentions in wiki text are dropped so a reason can never ping a channel, and messages are chunked to stay under Discord's 2000 character limit.
+- If `DELETION_CHANNEL_ID` points at a **forum channel**, the bot finds (or creates) a post titled `New pages for deletion` — with starter message `This post will notify future files that are candidates for deletion.` — and posts every notification into that post instead of the forum. The post's ID is stored in `deletion-watch-state.json` and it is also rediscovered by title if the state is lost. If the post is ever locked or archived, the bot unlocks and reopens it before posting.
 - The bot account still needs permission to view and send messages in `DELETION_CHANNEL_ID`. Deleting the pages themselves is a manual action; the bot only links to `?action=delete`.
 
 ## Web server and Instatus

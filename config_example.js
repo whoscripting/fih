@@ -36,9 +36,10 @@ const EMOJIS = {
 const WEB_SERVER = true;
 
 // Channel ID to post newly added candidates from Category:Candidates_for_deletion to.
+// Accepts a text channel, or a forum channel (notifications go into a dedicated "New pages for deletion" post).
 const DELETION_CHANNEL_ID = "your_channel_id_here";
 const DELETION_CHECK_INTERVAL_MS = 5 * 60 * 1000;
-// Optional role shown as a silent "-# <@&role>" subtext line above new candidate messages.
+// Optional role shown as a silent "-# <@&role>" subtext line below the heading in new candidate messages.
 // Accepts "<@&role_id>" or a bare role ID; leave empty to disable.
 const DELETION_ROLE_PING = "";
 

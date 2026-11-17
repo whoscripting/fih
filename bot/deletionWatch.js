@@ -13,7 +13,10 @@
 //   4. MediaWiki formatting inside the reason (bold, italic, links, code, ...)
 //      rendered as HTML is converted to Discord markdown.
 //   5. One message (chunked to respect Discord's 2000 char limit) is sent to
-//      DELETION_CHANNEL_ID. When DELETION_ROLE_PING is set, the message starts
+//      DELETION_CHANNEL_ID. If that channel is a forum channel, notifications go
+//      into a dedicated "New pages for deletion" post (created on demand, unlocked
+//      and reopened if necessary) instead of the forum itself. When
+//      DELETION_ROLE_PING is set, the message starts
 //      with a "-# <@&role>" subtext line below the heading and is sent silently
 //      (MessageFlags.SuppressNotifications). Wiki text can never ping anyone.
 
@@ -23,7 +26,7 @@ const cheerio = require("cheerio");
 
 const { fetch } = require("../functions/utils.js");
 const { getBotName } = require("./name.js");
-const { MessageFlags } = require("discord.js");
+const { MessageFlags, ChannelType } = require("discord.js");
 const {
     WIKIS,
     DELETION_CHANNEL_ID,
@@ -35,6 +38,10 @@ const CATEGORY_TITLE = "Category:Candidates_for_deletion";
 const STATE_FILE = path.join(__dirname, "..", "deletion-watch-state.json");
 const MAX_MESSAGE_LENGTH = 2000;
 const HEADER = "## New pages for deletion";
+// When DELETION_CHANNEL_ID points at a forum channel, all notifications go into a
+// single post with this title. The starter message is only sent when creating it.
+const FORUM_POST_TITLE = "New pages for deletion";
+const FORUM_STARTER_MESSAGE = "This post will notify future files that are candidates for deletion.";
 
 const getBotUserAgent = () => `${getBotName()} Discord bot`;
 
@@ -66,7 +73,10 @@ function loadState() {
         const raw = fs.readFileSync(STATE_FILE, "utf8");
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed?.members)) {
-            return { members: parsed.members.map(String) };
+            return {
+                members: parsed.members.map(String),
+                forumThreadId: parsed.forumThreadId ? String(parsed.forumThreadId) : null,
+            };
         }
     } catch (err) {
         if (err.code !== "ENOENT") {
@@ -76,11 +86,76 @@ function loadState() {
     return null;
 }
 
-function saveState(members) {
+function saveState(members, forumThreadId) {
     try {
-        fs.writeFileSync(STATE_FILE, JSON.stringify({ members }, null, 2));
+        fs.writeFileSync(STATE_FILE, JSON.stringify({ members, forumThreadId: forumThreadId || null }, null, 2));
     } catch (err) {
         console.error("deletionWatch: failed to write state file:", err.message);
+    }
+}
+
+// --- FORUM POST ---
+
+// Unlock and unarchive the post if it was closed, so notifications can keep flowing.
+async function ensureOpen(thread) {
+    try {
+        if (thread.locked) await thread.setLocked(false);
+        if (thread.archived) await thread.setArchived(false);
+    } catch (err) {
+        console.error("deletionWatch: failed to unlock/open forum post:", err.message);
+    }
+}
+
+// Finds the "New pages for deletion" post in the forum channel, creating it if
+// necessary. A stored post id is preferred; otherwise we search active and
+// archived posts before giving up and creating a new one.
+async function resolveForumPost(client, forumChannel, preferredId) {
+    if (preferredId) {
+        try {
+            const thread = await client.channels.fetch(preferredId);
+            if (thread) {
+                await ensureOpen(thread);
+                return thread;
+            }
+        } catch (err) {
+            console.warn("deletionWatch: stored forum post not found, searching for it:", err.message);
+        }
+    }
+
+    const findIn = (result) => {
+        // discord.js may return a Collection or a { threads } wrapper depending on version.
+        const collection = result?.threads ?? result;
+        return collection?.find?.(t => t.name === FORUM_POST_TITLE) || null;
+    };
+
+    let found = null;
+    try {
+        found = findIn(await forumChannel.threads.fetchActive());
+    } catch (err) {
+        console.warn("deletionWatch: failed to fetch active forum posts:", err.message);
+    }
+
+    if (!found) {
+        try {
+            found = findIn(await forumChannel.threads.fetchArchived({ limit: 50 }));
+        } catch (err) {
+            console.warn("deletionWatch: failed to fetch archived forum posts:", err.message);
+        }
+    }
+
+    if (found) {
+        await ensureOpen(found);
+        return found;
+    }
+
+    try {
+        return await forumChannel.threads.create({
+            name: FORUM_POST_TITLE,
+            message: { content: FORUM_STARTER_MESSAGE },
+        });
+    } catch (err) {
+        console.error("deletionWatch: failed to create forum post:", err.message);
+        return null;
     }
 }
 
@@ -262,7 +337,7 @@ async function checkForNewCandidates(client) {
     const newMembers = members.filter(member => !previous.has(member.title));
 
     if (newMembers.length === 0) {
-        saveState(titles);
+        saveState(titles, state?.forumThreadId);
         return;
     }
 
@@ -280,7 +355,18 @@ async function checkForNewCandidates(client) {
         return;
     }
 
-    if (!channel?.isTextBased?.()) {
+    // If the configured channel is a forum channel, all notifications go into a
+    // dedicated "New pages for deletion" post instead of the forum itself.
+    let target = channel;
+    let forumThreadId = state?.forumThreadId;
+    if (channel?.type === ChannelType.GuildForum) {
+        const post = await resolveForumPost(client, channel, forumThreadId);
+        if (!post) return; // state is not saved, so the next check retries
+        target = post;
+        forumThreadId = post.id;
+    }
+
+    if (!target?.isTextBased?.()) {
         console.error("deletionWatch: configured channel is missing or not text-based.");
         return;
     }
@@ -294,14 +380,14 @@ async function checkForNewCandidates(client) {
 
     for (const message of chunkMessages(buildHeader(rolePing), lines)) {
         try {
-            await channel.send({ content: message, allowedMentions, ...sendOptions });
+            await target.send({ content: message, allowedMentions, ...sendOptions });
         } catch (err) {
             console.error("deletionWatch: failed to send message:", err.message);
         }
     }
 
     // Save state only after the announcement was attempted so a failure retries next check.
-    saveState(titles);
+    saveState(titles, forumThreadId);
 }
 
 function startDeletionWatch(client) {
@@ -326,4 +412,6 @@ module.exports = {
     normalizeRolePing,
     buildHeader,
     isDefaultReason,
+    resolveForumPost,
+    ensureOpen,
 };
