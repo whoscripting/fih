@@ -98,9 +98,21 @@ This post will notify future files that are candidates for deletion.
 * **[Icon lighter2.png](<https://doorsgame.wiki/wiki/File:Icon_lighter2.png>)** [(delete)](<https://doorsgame.wiki/wiki/File:Icon_lighter2.png?action=delete>) — Duplicate file.
 ```
 
+If the check announces new candidates and some members from the previous check are still there, an extra plain message (no heading, no role ping) goes out right after the announcement(s), listing them comma-separated (files without the `File:` namespace):
+
+```
+[Icon lighter2.png](<https://doorsgame.wiki/wiki/File:Icon_lighter2.png>), [Luva skin camo.webp](<https://doorsgame.wiki/wiki/File:Luva_skin_camo.webp>) have not been deleted since the previous check.
+```
+
+Once everything is gone — the category was non-empty at the previous check and is empty now — a plain message is sent instead:
+
+```
+All pages have been deleted. Whew!
+```
+
 Notes:
 
-- On a fresh deployment (no state file yet), the first check is sent immediately with all current candidates; later checks run every `DELETION_CHECK_INTERVAL_MS`. Pages removed from the category and later re-added are announced again.
+- On a fresh deployment (no state file yet), the first check is sent immediately with all current candidates; later checks run every `DELETION_CHECK_INTERVAL_MS`. Pages removed from the category and later re-added are announced again. The stale reminder only fires when the check announces something new, and covers all candidates (files and articles). The all-deleted message only fires when the previous check had members and the category is empty now — it is not sent on a fresh deployment with an empty category.
 - Messages that overflow into additional chunks carry no `-#` ping line or heading, just the extra lines. When the reason is "No reason provided", the ` — No reason provided.` suffix is omitted.
 - When the role ping is configured, only that role may be mentioned (`allowedMentions: { roles: [roleId] }`); wiki text can never ping anyone.
 - The reason is read from the `.notice-template .doorswiki-deletion-reason` element on each page. MediaWiki rendering (bold, italic, strikethrough, code, links) is converted to Discord markdown; anything else is flattened to plain text.

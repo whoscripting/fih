@@ -19,6 +19,11 @@
 //      DELETION_ROLE_PING is set, the message starts
 //      with a "-# <@&role>" subtext line below the heading and is sent silently
 //      (MessageFlags.SuppressNotifications). Wiki text can never ping anyone.
+//   6. If the check announces new candidates and members from the
+//      previous check are still present, an extra plain message is sent afterwards
+//      (no heading, no role ping): "[Name](<url>), [Name](<url>) have not been
+//      deleted since the previous check." When the category is empty again after
+//      having members, a plain "All pages have been deleted. Whew!" is sent instead.
 
 const fs = require("fs");
 const path = require("path");
@@ -287,6 +292,28 @@ function buildLine(member, reason, wikiConfig) {
     return isDefaultReason(reason) ? base : `${base} — ${reason}`;
 }
 
+// Entries are comma-separated; only the final message carries the suffix.
+function buildStaleReminderMessages(staleMembers, wikiConfig) {
+    const links = staleMembers.map(member =>
+        `[${displayTitle(member.title, member.ns)}](<${pageUrl(member.title, "", wikiConfig)}>)`
+    );
+    const suffix = " have not been deleted since the previous check.";
+
+    const messages = [];
+    let current = "";
+    for (const link of links) {
+        const candidate = current ? `${current}, ${link}` : link;
+        if (candidate.length + suffix.length > MAX_MESSAGE_LENGTH && current) {
+            messages.push(current);
+            current = link;
+        } else {
+            current = candidate;
+        }
+    }
+    if (current) messages.push(current + suffix);
+    return messages;
+}
+
 function chunkMessages(header, lines) {
     const messages = [];
     let current = header;
@@ -311,6 +338,26 @@ function chunkMessages(header, lines) {
     return messages;
 }
 
+// Fetches the configured channel and, for forum channels, resolves the shared
+// "New pages for deletion" post. Returns null on failure (caller retries next check).
+async function resolveTarget(client, state) {
+    let channel;
+    try {
+        channel = await client.channels.fetch(DELETION_CHANNEL_ID);
+    } catch (err) {
+        console.error("deletionWatch: failed to fetch channel:", err.message);
+        return null;
+    }
+
+    if (channel?.type === ChannelType.GuildForum) {
+        const post = await resolveForumPost(client, channel, state?.forumThreadId);
+        if (!post) return null;
+        return { target: post, forumThreadId: post.id };
+    }
+
+    return { target: channel, forumThreadId: state?.forumThreadId };
+}
+
 // --- MAIN CHECK ---
 
 async function checkForNewCandidates(client) {
@@ -330,13 +377,37 @@ async function checkForNewCandidates(client) {
 
     const titles = members.map(member => member.title);
     const state = loadState();
+    const previousMembers = state?.members ?? null; // null = fresh deployment
 
     // No state file means a fresh deployment: every current member counts as new,
     // so the first check is sent immediately instead of seeding silently.
-    const previous = new Set(state?.members || []);
+    const previous = new Set(previousMembers || []);
     const newMembers = members.filter(member => !previous.has(member.title));
 
+    const rolePing = normalizeRolePing(DELETION_ROLE_PING);
+    const roleId = rolePingId(rolePing);
+    // Mentions are disabled so wiki text cannot ping anyone; only the configured
+    // role may be mentioned, and even then the message is sent silently.
+    const allowedMentions = roleId ? { parse: [], roles: [roleId] } : { parse: [] };
+    const sendOptions = rolePing ? { flags: [MessageFlags.SuppressNotifications] } : {};
+
     if (newMembers.length === 0) {
+        // The category just became empty after having members: everyone got deleted.
+        if (members.length === 0 && previousMembers?.length > 0) {
+            const resolved = await resolveTarget(client, state);
+            if (resolved?.target?.isTextBased?.()) {
+                try {
+                    await resolved.target.send({
+                        content: "All pages have been deleted. Whew!",
+                        allowedMentions: { parse: [] },
+                    });
+                } catch (err) {
+                    console.error("deletionWatch: failed to send all-deleted message:", err.message);
+                }
+                saveState(titles, resolved.forumThreadId);
+                return;
+            }
+        }
         saveState(titles, state?.forumThreadId);
         return;
     }
@@ -347,42 +418,31 @@ async function checkForNewCandidates(client) {
         lines.push(buildLine(member, reason, wikiConfig));
     }
 
-    let channel;
-    try {
-        channel = await client.channels.fetch(DELETION_CHANNEL_ID);
-    } catch (err) {
-        console.error("deletionWatch: failed to fetch channel:", err.message);
-        return;
-    }
+    const resolved = await resolveTarget(client, state);
+    if (!resolved) return; // state is not saved, so the next check retries
 
-    // If the configured channel is a forum channel, all notifications go into a
-    // dedicated "New pages for deletion" post instead of the forum itself.
-    let target = channel;
-    let forumThreadId = state?.forumThreadId;
-    if (channel?.type === ChannelType.GuildForum) {
-        const post = await resolveForumPost(client, channel, forumThreadId);
-        if (!post) return; // state is not saved, so the next check retries
-        target = post;
-        forumThreadId = post.id;
-    }
-
+    const { target, forumThreadId } = resolved;
     if (!target?.isTextBased?.()) {
         console.error("deletionWatch: configured channel is missing or not text-based.");
         return;
     }
-
-    const rolePing = normalizeRolePing(DELETION_ROLE_PING);
-    const roleId = rolePingId(rolePing);
-    // Mentions are disabled so wiki text cannot ping anyone; only the configured
-    // role may be mentioned, and even then the message is sent silently.
-    const allowedMentions = roleId ? { parse: [], roles: [roleId] } : { parse: [] };
-    const sendOptions = rolePing ? { flags: [MessageFlags.SuppressNotifications] } : {};
 
     for (const message of chunkMessages(buildHeader(rolePing), lines)) {
         try {
             await target.send({ content: message, allowedMentions, ...sendOptions });
         } catch (err) {
             console.error("deletionWatch: failed to send message:", err.message);
+        }
+    }
+
+    // Candidates from the previous check that are still in the category (files and articles).
+    // Sent after the announcement, without role ping or heading.
+    const staleMembers = members.filter(member => previous.has(member.title));
+    for (const staleMessage of buildStaleReminderMessages(staleMembers, wikiConfig)) {
+        try {
+            await target.send({ content: staleMessage, allowedMentions: { parse: [] } });
+        } catch (err) {
+            console.error("deletionWatch: failed to send stale reminder:", err.message);
         }
     }
 
@@ -414,4 +474,5 @@ module.exports = {
     isDefaultReason,
     resolveForumPost,
     ensureOpen,
+    buildStaleReminderMessages,
 };
