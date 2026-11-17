@@ -56,7 +56,7 @@ const PAGE_CACHE_MS = 30 * 60 * 1000;
 
 // --- DISCORD STATUSES ---
 const STATUS_OPTIONS = [
-    { type: 4, text: "just send [[a page]] or {{a page}}!" },
+    { type: 4, text: "just send [[a page]] or {{:a page}}!" },
     { type: 4, text: "doorsgame.wiki" },
     { type: 0, text: "DOORS" },
     { type: 5, text: "DOORS" },
