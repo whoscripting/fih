@@ -82,7 +82,23 @@ New candidates are posted to the channel configured with `DELETION_CHANNEL_ID` (
 * **[Icon lighter2.png](<https://doorsgame.wiki/wiki/File:Icon_lighter2.png>)** [(delete)](<https://doorsgame.wiki/wiki/File:Icon_lighter2.png?action=delete>) — Duplicate file.
 ```
 
-Without `DELETION_ROLE_PING`, the `-#` line is omitted and the message starts with `## New pages for deletion`. Notes:
+Without `DELETION_ROLE_PING`, the `-#` line is omitted and the message starts with `## New pages for deletion`. With a forum channel, the post is created (or reused) with this starter message:
+
+```
+This post will notify future files that are candidates for deletion.
+```
+
+Every notification then lands as a reply inside that post, keeping the forum itself tidy:
+
+```
+This post will notify future files that are candidates for deletion.
+
+## New pages for deletion
+-# <@&1570491422321148044>
+* **[Icon lighter2.png](<https://doorsgame.wiki/wiki/File:Icon_lighter2.png>)** [(delete)](<https://doorsgame.wiki/wiki/File:Icon_lighter2.png?action=delete>) — Duplicate file.
+```
+
+Notes:
 
 - On a fresh deployment (no state file yet), the first check is sent immediately with all current candidates; later checks run every `DELETION_CHECK_INTERVAL_MS`. Pages removed from the category and later re-added are announced again.
 - Messages that overflow into additional chunks carry no `-#` ping line or heading, just the extra lines. When the reason is "No reason provided", the ` — No reason provided.` suffix is omitted.
