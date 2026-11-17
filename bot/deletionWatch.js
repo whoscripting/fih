@@ -14,7 +14,7 @@
 //      rendered as HTML is converted to Discord markdown.
 //   5. One message (chunked to respect Discord's 2000 char limit) is sent to
 //      DELETION_CHANNEL_ID. When DELETION_ROLE_PING is set, the message starts
-//      with a "-# <@&role>" subtext line and is sent silently
+//      with a "-# <@&role>" subtext line below the heading and is sent silently
 //      (MessageFlags.SuppressNotifications). Wiki text can never ping anyone.
 
 const fs = require("fs");
@@ -56,7 +56,7 @@ function rolePingId(rolePing) {
 }
 
 function buildHeader(rolePing) {
-    return rolePing ? `-# ${rolePing}\n${HEADER}` : HEADER;
+    return rolePing ? `${HEADER}\n-# ${rolePing}` : HEADER;
 }
 
 // --- STATE FILE ---

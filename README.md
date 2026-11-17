@@ -59,7 +59,7 @@ Most bot behavior is configured in [`config.js`](config.js). Restart the bot aft
 | `WEB_SERVER` | Starts the small status web server when `true`. Set it to `false` to disable the server; `PORT` is then not required. |
 | `DELETION_CHANNEL_ID` | Channel the bot posts newly added candidates from `Category:Candidates_for_deletion` to. Set to an empty value to disable the watcher. |
 | `DELETION_CHECK_INTERVAL_MS` | How often the deletion watcher checks the category. The default is five minutes. |
-| `DELETION_ROLE_PING` | Optional. When set (`<@&role_id>` or a bare role ID), new candidate messages start with a silent `-# <@&role_id>` subtext line and are sent with notifications suppressed. Leave empty to disable. |
+| `DELETION_ROLE_PING` | Optional. When set (`<@&role_id>` or a bare role ID), new candidate messages include a silent `-# <@&role_id>` subtext line below the heading and are sent with notifications suppressed. Leave empty to disable. |
 | `STATUS_OPTIONS` | Customizes the bot’s rotating Discord status messages and activity types. |
 | `STATUS_INTERVAL_MS` | Controls how often the bot rotates its status. The default is five minutes. |
 | `PAGE_CACHE_MS` | Controls how long page lookups stay cached in memory. The default is 30 minutes. |
@@ -75,8 +75,8 @@ When adding a wiki, add its configuration to `WIKIS` and update `WIKI_MAP` or th
 New candidates are posted to the channel configured with `DELETION_CHANNEL_ID`. With `DELETION_ROLE_PING` set, the message is sent silently (`SuppressNotifications`) and looks like this:
 
 ```
--# <@&1570491422321148044>
 ## New pages for deletion
+-# <@&1570491422321148044>
 * **[Icon lighter2.png](<https://doorsgame.wiki/wiki/File:Icon_lighter2.png>)** [(delete)](<https://doorsgame.wiki/wiki/File:Icon_lighter2.png?action=delete>) — Duplicate file.
 ```
 
