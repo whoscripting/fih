@@ -200,11 +200,16 @@ function displayTitle(title, ns) {
     return title;
 }
 
+function isDefaultReason(reason) {
+    return /^no reason provided\.?$/i.test(String(reason || "").trim());
+}
+
 function buildLine(member, reason, wikiConfig) {
     const display = displayTitle(member.title, member.ns);
     const link = `<${pageUrl(member.title, "", wikiConfig)}>`;
     const deleteLink = `<${pageUrl(member.title, "?action=delete", wikiConfig)}>`;
-    return `* **[${display}](${link})** [(delete)](${deleteLink}) — ${reason}`;
+    const base = `* **[${display}](${link})** [(delete)](${deleteLink})`;
+    return isDefaultReason(reason) ? base : `${base} — ${reason}`;
 }
 
 function chunkMessages(header, lines) {
@@ -212,9 +217,9 @@ function chunkMessages(header, lines) {
     let current = header;
 
     for (const rawLine of lines) {
-        // Keep a single line small enough to fit after the continued-header prefix.
-        const line = rawLine.length > MAX_MESSAGE_LENGTH - header.length - 40
-            ? rawLine.slice(0, MAX_MESSAGE_LENGTH - header.length - 43) + "..."
+        // A single line never exceeds the limit on its own.
+        const line = rawLine.length > MAX_MESSAGE_LENGTH
+            ? rawLine.slice(0, MAX_MESSAGE_LENGTH - 3) + "..."
             : rawLine;
 
         const candidate = `${current}\n${line}`;
@@ -222,7 +227,8 @@ function chunkMessages(header, lines) {
             current = candidate;
         } else {
             messages.push(current);
-            current = `${header} (continued)\n${line}`;
+            // Continuation chunks carry no ping/heading, just the lines.
+            current = line;
         }
     }
 
@@ -319,4 +325,5 @@ module.exports = {
     chunkMessages,
     normalizeRolePing,
     buildHeader,
+    isDefaultReason,
 };

@@ -83,6 +83,7 @@ New candidates are posted to the channel configured with `DELETION_CHANNEL_ID`. 
 Without `DELETION_ROLE_PING`, the `-#` line is omitted and the message starts with `## New pages for deletion`. Notes:
 
 - On a fresh deployment (no state file yet), the first check is sent immediately with all current candidates; later checks run every `DELETION_CHECK_INTERVAL_MS`. Pages removed from the category and later re-added are announced again.
+- Messages that overflow into additional chunks carry no `-#` ping line or heading, just the extra lines. When the reason is "No reason provided", the ` — No reason provided.` suffix is omitted.
 - When the role ping is configured, only that role may be mentioned (`allowedMentions: { roles: [roleId] }`); wiki text can never ping anyone.
 - The reason is read from the `.notice-template .doorswiki-deletion-reason` element on each page. MediaWiki rendering (bold, italic, strikethrough, code, links) is converted to Discord markdown; anything else is flattened to plain text.
 - The link text strips the namespace prefix (e.g. `File:Icon lighter2.png` shows as `Icon lighter2.png`); links themselves point at the full page.
