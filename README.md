@@ -107,6 +107,7 @@ Notes:
 - The link text strips the namespace prefix (e.g. `File:Icon lighter2.png` shows as `Icon lighter2.png`); links themselves point at the full page.
 - Mentions in wiki text are dropped so a reason can never ping a channel, and messages are chunked to stay under Discord's 2000 character limit.
 - If `DELETION_CHANNEL_ID` points at a **forum channel**, the bot finds (or creates) a post titled `New pages for deletion` — with starter message `This post will notify future files that are candidates for deletion.` — and posts every notification into that post instead of the forum. The post's ID is stored in `deletion-watch-state.json` and it is also rediscovered by title if the state is lost. If the post is ever locked or archived, the bot unlocks and reopens it before posting.
+- If the forum channel requires tags, the post cannot be created — the log shows `deletionWatch: failed to create forum post: A tag is required to create a forum post in this channel`. To work around this: temporarily disable tag requirements (or make tags optional) for the forum channel, restart the server/bot so the post gets created on the next check, then re-enable tag requirements — the existing post keeps working without tags.
 - The bot account still needs permission to view and send messages in `DELETION_CHANNEL_ID`. Deleting the pages themselves is a manual action; the bot only links to `?action=delete`.
 
 ## Web server and Instatus
