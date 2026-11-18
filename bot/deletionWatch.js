@@ -24,6 +24,9 @@
 //      (no heading, no role ping): "[Name](<url>), [Name](<url>) have not been
 //      deleted since the previous check." When the category is empty again after
 //      having members, a plain "All pages have been deleted. Whew!" is sent instead.
+//   7. Every check also edits previously sent messages: candidates that
+//      disappeared from the category get their line (or link in the stale
+//      reminder) wrapped in ||~~...~~|| to comment them out.
 
 const fs = require("fs");
 const path = require("path");
@@ -73,14 +76,36 @@ function buildHeader(rolePing) {
 
 // --- STATE FILE ---
 
+// State shape:
+// {
+//   members: string[],             // wiki titles from the previous check
+//   forumThreadId: string | null,  // forum post to post into, when DELETION_CHANNEL_ID is a forum
+//   messages: [{ id, units: [{ title, text, struck }] }],
+// }
+// `messages` tracks messages the bot sent, so deleted candidates can be
+// struck through (||~~...~~||) by editing those messages afterwards.
+
 function loadState() {
     try {
         const raw = fs.readFileSync(STATE_FILE, "utf8");
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed?.members)) {
+            const messages = Array.isArray(parsed.messages)
+                ? parsed.messages.map(message => ({
+                    id: String(message?.id || ""),
+                    units: Array.isArray(message?.units)
+                        ? message.units.map(unit => ({
+                            title: String(unit?.title || ""),
+                            text: String(unit?.text || ""),
+                            struck: Boolean(unit?.struck),
+                        }))
+                        : [],
+                })).filter(message => message.id)
+                : [];
             return {
                 members: parsed.members.map(String),
                 forumThreadId: parsed.forumThreadId ? String(parsed.forumThreadId) : null,
+                messages,
             };
         }
     } catch (err) {
@@ -91,9 +116,9 @@ function loadState() {
     return null;
 }
 
-function saveState(members, forumThreadId) {
+function saveState(members, forumThreadId, messages) {
     try {
-        fs.writeFileSync(STATE_FILE, JSON.stringify({ members, forumThreadId: forumThreadId || null }, null, 2));
+        fs.writeFileSync(STATE_FILE, JSON.stringify({ members, forumThreadId: forumThreadId || null, messages: messages || [] }, null, 2));
     } catch (err) {
         console.error("deletionWatch: failed to write state file:", err.message);
     }
@@ -293,49 +318,101 @@ function buildLine(member, reason, wikiConfig) {
 }
 
 // Entries are comma-separated; only the final message carries the suffix.
+// Returns [{ text, units }] so each sent message can be tracked for striking later.
 function buildStaleReminderMessages(staleMembers, wikiConfig) {
-    const links = staleMembers.map(member =>
-        `[${displayTitle(member.title, member.ns)}](<${pageUrl(member.title, "", wikiConfig)}>)`
-    );
+    const entries = staleMembers.map(member => ({
+        title: member.title,
+        text: `[${displayTitle(member.title, member.ns)}](<${pageUrl(member.title, "", wikiConfig)}>)`,
+    }));
     const suffix = " have not been deleted since the previous check.";
 
     const messages = [];
     let current = "";
-    for (const link of links) {
-        const candidate = current ? `${current}, ${link}` : link;
+    let currentUnits = [];
+    for (const entry of entries) {
+        const candidate = current ? `${current}, ${entry.text}` : entry.text;
         if (candidate.length + suffix.length > MAX_MESSAGE_LENGTH && current) {
-            messages.push(current);
-            current = link;
+            messages.push({ text: current, units: currentUnits });
+            current = entry.text;
+            currentUnits = [{ title: entry.title, text: entry.text, struck: false }];
         } else {
             current = candidate;
+            currentUnits.push({ title: entry.title, text: entry.text, struck: false });
         }
     }
-    if (current) messages.push(current + suffix);
+    if (current) {
+        messages.push({ text: current + suffix, units: currentUnits });
+    }
     return messages;
 }
 
-function chunkMessages(header, lines) {
-    const messages = [];
-    let current = header;
+// items: [{ text, units }]. Returns [{ content, units }] chunks; continuation
+// chunks carry no ping/heading, just the lines.
+function chunkItems(header, items) {
+    const chunks = [];
+    let currentText = header;
+    let currentUnits = [];
 
-    for (const rawLine of lines) {
-        // A single line never exceeds the limit on its own.
-        const line = rawLine.length > MAX_MESSAGE_LENGTH
-            ? rawLine.slice(0, MAX_MESSAGE_LENGTH - 3) + "..."
-            : rawLine;
-
-        const candidate = `${current}\n${line}`;
+    for (const item of items) {
+        const candidate = `${currentText}\n${item.text}`;
         if (candidate.length <= MAX_MESSAGE_LENGTH) {
-            current = candidate;
+            currentText = candidate;
+            currentUnits.push(...item.units);
         } else {
-            messages.push(current);
+            chunks.push({ content: currentText, units: currentUnits });
             // Continuation chunks carry no ping/heading, just the lines.
-            current = line;
+            currentText = item.text;
+            currentUnits = [...item.units];
         }
     }
 
-    if (current) messages.push(current);
-    return messages;
+    if (currentText) chunks.push({ content: currentText, units: currentUnits });
+    return chunks;
+}
+
+// Wraps the lines/links of candidates that disappeared from the category in
+// ||~~...~~|| by editing the previously sent messages. Returns the messages
+// that still have unstruck units (fully struck ones are dropped from tracking).
+async function strikeDeletedCandidates(target, messages, currentMemberSet) {
+    const updated = [];
+
+    for (const message of messages) {
+        const units = message.units || [];
+        const pending = units.filter(unit => !unit.struck && !currentMemberSet.has(unit.title));
+
+        if (!pending.length) {
+            if (units.some(unit => !unit.struck)) updated.push(message);
+            continue;
+        }
+
+        try {
+            const fetched = await target.messages.fetch(message.id);
+            if (!fetched) throw new Error("message not found");
+
+            let content = fetched.content;
+            for (const unit of pending) {
+                // Idempotency: never double-wrap if a previous edit went through
+                // but the strike was not persisted to the state file.
+                if (content.includes(`||~~${unit.text}~~||`)) {
+                    unit.struck = true;
+                    continue;
+                }
+                if (content.includes(unit.text)) {
+                    content = content.replace(unit.text, `||~~${unit.text}~~||`);
+                }
+                unit.struck = true;
+            }
+
+            if (content !== fetched.content) await fetched.edit(content);
+        } catch (err) {
+            console.warn(`deletionWatch: could not edit message ${message.id}, dropping it from tracking:`, err.message);
+            units.forEach(unit => { unit.struck = true; });
+        }
+
+        if (units.some(unit => !unit.struck)) updated.push(message);
+    }
+
+    return updated;
 }
 
 // Fetches the configured channel and, for forum channels, resolves the shared
@@ -376,8 +453,10 @@ async function checkForNewCandidates(client) {
     }
 
     const titles = members.map(member => member.title);
+    const currentMemberSet = new Set(titles);
     const state = loadState();
     const previousMembers = state?.members ?? null; // null = fresh deployment
+    let trackedMessages = state?.messages ?? [];
 
     // No state file means a fresh deployment: every current member counts as new,
     // so the first check is sent immediately instead of seeding silently.
@@ -391,11 +470,26 @@ async function checkForNewCandidates(client) {
     const allowedMentions = roleId ? { parse: [], roles: [roleId] } : { parse: [] };
     const sendOptions = rolePing ? { flags: [MessageFlags.SuppressNotifications] } : {};
 
+    const hasPendingStrike = trackedMessages.some(message =>
+        message.units.some(unit => !unit.struck && !currentMemberSet.has(unit.title))
+    );
+
     if (newMembers.length === 0) {
-        // The category just became empty after having members: everyone got deleted.
-        if (members.length === 0 && previousMembers?.length > 0) {
-            const resolved = await resolveTarget(client, state);
-            if (resolved?.target?.isTextBased?.()) {
+        const wantsAllDeleted = members.length === 0 && previousMembers?.length > 0;
+        // Nothing to announce or strike: quiet check, just refresh member list.
+        if (!wantsAllDeleted && !hasPendingStrike) {
+            saveState(titles, state?.forumThreadId, trackedMessages);
+            return;
+        }
+
+        const resolved = await resolveTarget(client, state);
+        if (!resolved) {
+            saveState(titles, state?.forumThreadId, trackedMessages);
+            return;
+        }
+        if (resolved.target?.isTextBased?.()) {
+            trackedMessages = await strikeDeletedCandidates(resolved.target, trackedMessages, currentMemberSet);
+            if (wantsAllDeleted) {
                 try {
                     await resolved.target.send({
                         content: "All pages have been deleted. Whew!",
@@ -404,18 +498,21 @@ async function checkForNewCandidates(client) {
                 } catch (err) {
                     console.error("deletionWatch: failed to send all-deleted message:", err.message);
                 }
-                saveState(titles, resolved.forumThreadId);
-                return;
             }
         }
-        saveState(titles, state?.forumThreadId);
+        saveState(titles, resolved.forumThreadId, trackedMessages);
         return;
     }
 
-    const lines = [];
+    const items = [];
     for (const member of newMembers) {
         const reason = await getDeletionReason(member.title, wikiConfig);
-        lines.push(buildLine(member, reason, wikiConfig));
+        let line = buildLine(member, reason, wikiConfig);
+        if (line.length > MAX_MESSAGE_LENGTH) line = `${line.slice(0, MAX_MESSAGE_LENGTH - 3)}...`;
+        items.push({
+            text: line,
+            units: [{ title: member.title, text: line.replace(/^\*\s+/, ""), struck: false }],
+        });
     }
 
     const resolved = await resolveTarget(client, state);
@@ -424,12 +521,20 @@ async function checkForNewCandidates(client) {
     const { target, forumThreadId } = resolved;
     if (!target?.isTextBased?.()) {
         console.error("deletionWatch: configured channel is missing or not text-based.");
+        saveState(titles, forumThreadId, trackedMessages);
         return;
     }
 
-    for (const message of chunkMessages(buildHeader(rolePing), lines)) {
+    // Strike through deleted candidates in the previously sent messages first,
+    // so edits land before the new announcement.
+    if (hasPendingStrike) {
+        trackedMessages = await strikeDeletedCandidates(target, trackedMessages, currentMemberSet);
+    }
+
+    for (const chunk of chunkItems(buildHeader(rolePing), items)) {
         try {
-            await target.send({ content: message, allowedMentions, ...sendOptions });
+            const message = await target.send({ content: chunk.content, allowedMentions, ...sendOptions });
+            if (message?.id) trackedMessages.push({ id: message.id, units: chunk.units });
         } catch (err) {
             console.error("deletionWatch: failed to send message:", err.message);
         }
@@ -440,14 +545,15 @@ async function checkForNewCandidates(client) {
     const staleMembers = members.filter(member => previous.has(member.title));
     for (const staleMessage of buildStaleReminderMessages(staleMembers, wikiConfig)) {
         try {
-            await target.send({ content: staleMessage, allowedMentions: { parse: [] } });
+            const message = await target.send({ content: staleMessage.text, allowedMentions: { parse: [] } });
+            if (message?.id) trackedMessages.push({ id: message.id, units: staleMessage.units });
         } catch (err) {
             console.error("deletionWatch: failed to send stale reminder:", err.message);
         }
     }
 
     // Save state only after the announcement was attempted so a failure retries next check.
-    saveState(titles, forumThreadId);
+    saveState(titles, forumThreadId, trackedMessages);
 }
 
 function startDeletionWatch(client) {
@@ -468,11 +574,12 @@ module.exports = {
     inlineHtmlToDiscord,
     buildLine,
     displayTitle,
-    chunkMessages,
+    chunkItems,
     normalizeRolePing,
     buildHeader,
     isDefaultReason,
     resolveForumPost,
     ensureOpen,
     buildStaleReminderMessages,
+    strikeDeletedCandidates,
 };

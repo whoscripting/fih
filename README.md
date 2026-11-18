@@ -110,9 +110,17 @@ Once everything is gone — the category was non-empty at the previous check and
 All pages have been deleted. Whew!
 ```
 
+After every check, candidates that disappeared from the category (deleted or removed) are struck through in the previously sent messages by editing them in place — the line (or individual link in the stale reminder) is wrapped in `||~~…~~||`, keeping the `*` bullet outside:
+
+```
+* ||~~**[Icon lighter2.png](<https://doorsgame.wiki/wiki/File:Icon_lighter2.png>)** [(delete)](<https://doorsgame.wiki/wiki/File:Icon_lighter2.png?action=delete>) — Duplicate file.~~||
+* **[Night Vision Scanner 3000](<https://doorsgame.wiki/wiki/Night_Vision_Scanner_3000>)** [(delete)](<https://doorsgame.wiki/wiki/Night_Vision_Scanner_3000?action=delete>)
+```
+
 Notes:
 
 - On a fresh deployment (no state file yet), the first check is sent immediately with all current candidates; later checks run every `DELETION_CHECK_INTERVAL_MS`. Pages removed from the category and later re-added are announced again. The stale reminder only fires when the check announces something new, and covers all candidates (files and articles). The all-deleted message only fires when the previous check had members and the category is empty now — it is not sent on a fresh deployment with an empty category.
+- The bot tracks the IDs of the messages it sends (stored in `deletion-watch-state.json`). On every check it edits those messages: any candidate no longer in the category is wrapped in `||~~…~~||`. Fully struck messages are dropped from tracking, and already-wrapped text is never double-wrapped.
 - Messages that overflow into additional chunks carry no `-#` ping line or heading, just the extra lines. When the reason is "No reason provided", the ` — No reason provided.` suffix is omitted.
 - When the role ping is configured, only that role may be mentioned (`allowedMentions: { roles: [roleId] }`); wiki text can never ping anyone.
 - The reason is read from the `.notice-template .doorswiki-deletion-reason` element on each page. MediaWiki rendering (bold, italic, strikethrough, code, links) is converted to Discord markdown; anything else is flattened to plain text.
