@@ -47,7 +47,7 @@ const WEB_SERVER = true;
 // Posts newly added candidates from Category:Candidates_for_deletion to this Discord channel.
 // If this is a forum channel, notifications go into a dedicated "New pages for deletion" post instead.
 const DELETION_CHANNEL_ID = "1021805956344066129";
-const DELETION_CHECK_INTERVAL_MS = 60 * 60 * 1000;
+const DELETION_CHECK_INTERVAL_MS = 30 * 60 * 1000;
 // Optional role shown as a silent "-# <@&role>" subtext line below the heading in new candidate messages.
 // Accepts "<@&role_id>" or a bare role ID; leave empty to disable.
 const DELETION_ROLE_PING = "<@&1570491422321148044>";
