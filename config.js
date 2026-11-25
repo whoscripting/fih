@@ -34,6 +34,22 @@ const COMMANDS = {
     parse: true,
     user: true,
     random: true,
+    tracker: true,
+};
+
+// The tracker is enabled by COMMANDS.tracker. These values are kept here so
+// the tracker shares fih's Discord client instead of running a second bot.
+const TRACKER = {
+    roleId: "1575211530667040839",
+    distribution: {
+        "1018420502286581812": [
+            "2440500124", // DOORS
+        ],
+    },
+    frequency: 1000000,
+    updateBatchWindowMs: 5 * 60 * 1000,
+    updatePingAfterMs: 24 * 60 * 60 * 1000,
+    intervalMs: 3 * 60 * 1000,
 };
 
 const INLINE_TEXT = true;
@@ -71,6 +87,7 @@ module.exports = {
     WIKIS,
     WIKI_MAP: typeof WIKI_MAP !== "undefined" ? WIKI_MAP : undefined,
     COMMANDS,
+    TRACKER,
     INLINE_TEXT,
     EMOJIS,
     WEB_SERVER,

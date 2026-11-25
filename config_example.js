@@ -24,8 +24,24 @@ const COMMANDS = {
     parse: true,
     user: true,
     random: true,
+    tracker: true,
 };
 
+// Set COMMANDS.tracker to false to disable all tracker checks and role pings.
+const TRACKER = {
+    roleId: "DISCORD_ROLE_ID",
+    distribution: {
+        // Each channel ID maps to one or more Roblox universe IDs.
+        "DISCORD_CHANNEL_ID": ["ROBLOX_UNIVERSE_ID"],
+        // "DISCORD_CHANNEL_ID_2": ["ROBLOX_UNIVERSE_ID_2", "ROBLOX_UNIVERSE_ID_3"],
+    },
+    frequency: 10000,
+    // Updates within this window are compiled into one message without a role ping.
+    updateBatchWindowMs: 5 * 60 * 1000,
+    // A single update only pings the role when the previous update was at least this old.
+    updatePingAfterMs: 24 * 60 * 60 * 1000,
+    intervalMs: 3 * 60 * 1000,
+};
 // Enable or disable inline wiki syntax such as [[Page]] and {{Template}}.
 const INLINE_TEXT = true;
 
@@ -57,6 +73,7 @@ module.exports = {
     WIKIS,
     WIKI_MAP: typeof WIKI_MAP !== "undefined" ? WIKI_MAP : undefined,
     COMMANDS,
+    TRACKER,
     INLINE_TEXT,
     EMOJIS,
     WEB_SERVER,
