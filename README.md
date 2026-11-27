@@ -156,7 +156,7 @@ Notes:
 - Wiki text cannot ping anyone (`allowedMentions: { parse: [] }`), and overlong posts are truncated to stay under Discord's 2000 character limit.
 - The bot needs **Manage Webhooks** permission in `TALK_CHANNEL_ID` the first time it runs, so it can create the webhook. Its ID is saved in `talk-watch-state.json` and reused afterwards.
 - If `TALK_CHANNEL_ID` is a **forum channel**, notifications go into a dedicated `Talk page watcher` post (created or reused, and reopened if locked/archived) instead of the forum itself.
-- On the first run there is no state file, so every new topic currently in recent changes is announced at once. Later checks only announce topics seen after the previous check (with a one-minute overlap to avoid missing late-arriving changes).
+- On a fresh deployment/restart there is no state file, so only topics from the previous 15 minutes are announced instead of every topic still in recent changes. After that first check, later checks only announce topics seen after the previous check (with a one-minute overlap to avoid missing late-arriving changes).
 
 ## Web server and Instatus
 

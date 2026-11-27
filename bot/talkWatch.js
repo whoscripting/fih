@@ -9,6 +9,8 @@
 //   2. Processed recent-change IDs are stored in a gitignored state file, so a
 //      topic is only announced once. The query overlaps the previous check by
 //      a minute to cope with recent changes being inserted slightly out of order.
+//      On a fresh deployment (no state file), only topics from the last 15
+//      minutes are considered, so a restart does not spam old discussions.
 //   3. The revision that created the topic is fetched by ID. Because parsing
 //      happens at that exact revision, replies added later never leak in, even
 //      if the bot is running behind.
@@ -38,6 +40,7 @@ const MAX_MESSAGE_LENGTH = 2000;
 const MAX_PROCESSED_IDS = 500;
 const MAX_ATTACHMENTS = 10;
 const OVERLAP_MS = 60 * 1000;
+const FRESH_DEPLOYMENT_WINDOW_MS = 15 * 60 * 1000;
 const WEBHOOK_NAME = "Talk Page Watcher (Fih bot)";
 const FORUM_POST_TITLE = "Talk page watcher";
 const FORUM_STARTER_MESSAGE = "New topics from the wiki's Talk namespace will be posted here.";
@@ -56,9 +59,13 @@ function getDefaultWiki() {
 // --- STATE FILE ---
 
 // { webhookId, forumThreadId, processedIds: string[], lastCheck: ISO timestamp }
+// `fresh` is runtime-only (it is not saved): true when there is no usable state
+// file yet, meaning the watcher should limit its first check to a short window.
 function loadState() {
     try {
         const parsed = JSON.parse(fs.readFileSync(STATE_FILE, "utf8"));
+        const fresh = !(parsed && typeof parsed === "object"
+            && (typeof parsed.lastCheck === "string" || Array.isArray(parsed.processedIds)));
         return {
             webhookId: parsed?.webhookId ? String(parsed.webhookId) : null,
             forumThreadId: parsed?.forumThreadId ? String(parsed.forumThreadId) : null,
@@ -66,12 +73,13 @@ function loadState() {
                 ? parsed.processedIds.map(String).slice(-MAX_PROCESSED_IDS)
                 : [],
             lastCheck: typeof parsed?.lastCheck === "string" ? parsed.lastCheck : null,
+            fresh,
         };
     } catch (err) {
         if (err.code !== "ENOENT") {
             console.warn("talkWatch: failed to read state file, starting fresh:", err.message);
         }
-        return { webhookId: null, forumThreadId: null, processedIds: [], lastCheck: null };
+        return { webhookId: null, forumThreadId: null, processedIds: [], lastCheck: null, fresh: true };
     }
 }
 
@@ -106,7 +114,7 @@ function sectionNameFromSummary(change) {
     return decodeEntities(match[1]).replace(/\s+/g, " ").trim() || null;
 }
 
-async function getNewTopicChanges(wikiConfig, state) {
+function buildRecentChangesParams(state) {
     const params = new URLSearchParams({
         action: "query",
         list: "recentchanges",
@@ -117,10 +125,18 @@ async function getNewTopicChanges(wikiConfig, state) {
         rclimit: "500",
         rcdir: "older",
     });
-    if (state.lastCheck) {
+    if (state.fresh) {
+        // No state file yet: only consider topics created in the last 15 minutes.
+        params.set("rcstart", new Date(Date.now() - FRESH_DEPLOYMENT_WINDOW_MS).toISOString());
+    } else if (state.lastCheck) {
         const last = Date.parse(state.lastCheck);
         if (Number.isFinite(last)) params.set("rcstart", new Date(last - OVERLAP_MS).toISOString());
     }
+    return params;
+}
+
+async function getNewTopicChanges(wikiConfig, state) {
+    const params = buildRecentChangesParams(state);
 
     const res = await fetch(`${wikiConfig.apiEndpoint}?${params.toString()}`, {
         headers: { "User-Agent": getBotUserAgent() },
@@ -720,6 +736,7 @@ function startTalkWatch(client) {
 module.exports = {
     startTalkWatch,
     checkForNewTopics,
+    buildRecentChangesParams,
     isNewTopic,
     sectionNameFromSummary,
     extractSectionWikitext,
