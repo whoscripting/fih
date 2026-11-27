@@ -138,7 +138,7 @@ Notes:
 
 ## Talk page watcher
 
-`bot/talkWatch.js` watches the default wiki's Talk namespace (`Talk:`) for new topics. On startup and then every `TALK_CHECK_INTERVAL_MS` (five minutes by default), it checks recent changes for entries tagged `discussiontools-newtopic` (with a fallback to MediaWiki's standard `/* Section */ new section` summary). Replies are ignored. Processed change IDs are stored in `talk-watch-state.json` (gitignored), so each topic is announced once.
+`bot/talkWatch.js` watches every talk namespace on the default wiki (discovered from the wiki's siteinfo, including custom ones) except `User talk` and `Blog talk`. On startup and then every `TALK_CHECK_INTERVAL_MS` (five minutes by default), it checks recent changes for entries tagged `discussiontools-newtopic` (with a fallback to MediaWiki's standard `/* Section */ new section` summary). Replies are ignored. Processed change IDs are stored in `talk-watch-state.json` (gitignored), so each topic is announced once.
 
 Topics are posted to `TALK_CHANNEL_ID` through a webhook, which lets each message override the bot's name and avatar with the topic author's name and wiki profile avatar. A message looks like this:
 

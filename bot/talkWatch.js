@@ -1,9 +1,11 @@
-// Periodically watches the wiki's Talk namespace for new topics and mirrors
+// Periodically watches the wiki's talk namespaces (except User talk and
+// Blog talk) for new topics and mirrors
 // only the opening post of each topic to a Discord channel.
 //
 // How it works:
 //   1. On bot ready (and then every TALK_CHECK_INTERVAL_MS), it asks the
-//      MediaWiki API for recent changes in namespace 1 (Talk:). Changes tagged
+//      MediaWiki API for recent changes in every talk namespace (discovered
+//      from siteinfo, excluding User talk and Blog talk). Changes tagged
 //      `discussiontools-newtopic` — or whose edit summary is a "new section"
 //      summary — are new topics. Replies (`discussiontools-reply`) are ignored.
 //   2. Processed recent-change IDs are stored in a gitignored state file, so a
@@ -34,7 +36,14 @@ const {
     TALK_CHECK_INTERVAL_MS,
 } = require("../config.js");
 
-const TALK_NAMESPACE = 1;
+// MediaWiki convention: even namespaces are subject pages, odd ones are their
+// talk pages. User talk (3) and Blog talk are deliberately excluded.
+const EXCLUDED_TALK_NAMESPACES = new Set([3]);
+const EXCLUDED_TALK_NAMESPACE_NAMES = new Set(["blog talk"]);
+const FALLBACK_TALK_NAMESPACES = [1, 5, 7, 9, 11, 13, 15];
+const NAMESPACE_CACHE_MS = 60 * 60 * 1000;
+let talkNamespacesCache = { ids: null, expiresAt: 0 };
+
 const STATE_FILE = path.join(__dirname, "..", "talk-watch-state.json");
 const MAX_MESSAGE_LENGTH = 2000;
 const MAX_PROCESSED_IDS = 500;
@@ -43,7 +52,7 @@ const OVERLAP_MS = 60 * 1000;
 const FRESH_DEPLOYMENT_WINDOW_MS = 15 * 60 * 1000;
 const WEBHOOK_NAME = "Talk Page Watcher (Fih bot)";
 const FORUM_POST_TITLE = "Talk page watcher";
-const FORUM_STARTER_MESSAGE = "New topics from the wiki's Talk namespace will be posted here.";
+const FORUM_STARTER_MESSAGE = "New topics from the wiki's talk pages will be posted here.";
 
 const MONTHS = [
     "January", "February", "March", "April", "May", "June",
@@ -99,6 +108,44 @@ function saveState(state) {
 
 // --- WIKI API ---
 
+// Discovers the wiki's talk namespaces from siteinfo so custom talk namespaces
+// are included automatically. Cached for an hour; falls back to the built-ins.
+async function getTalkNamespaces(wikiConfig) {
+    if (talkNamespacesCache.ids && Date.now() < talkNamespacesCache.expiresAt) {
+        return talkNamespacesCache.ids;
+    }
+    try {
+        const params = new URLSearchParams({
+            action: "query",
+            meta: "siteinfo",
+            siprop: "namespaces",
+            format: "json",
+        });
+        const res = await fetch(`${wikiConfig.apiEndpoint}?${params.toString()}`, {
+            headers: { "User-Agent": getBotUserAgent() },
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        const namespaces = (await res.json()).query?.namespaces || {};
+        const ids = Object.values(namespaces)
+            .filter(namespace => {
+                const id = Number(namespace.id);
+                const canonical = String(namespace.canonical || "").trim().toLowerCase();
+                return Number.isInteger(id) && id > 0 && id % 2 === 1
+                    && !EXCLUDED_TALK_NAMESPACES.has(id)
+                    && !EXCLUDED_TALK_NAMESPACE_NAMES.has(canonical);
+            })
+            .map(namespace => Number(namespace.id))
+            .sort((left, right) => left - right);
+        if (ids.length) {
+            talkNamespacesCache = { ids, expiresAt: Date.now() + NAMESPACE_CACHE_MS };
+            return ids;
+        }
+    } catch (err) {
+        console.warn("talkWatch: failed to discover talk namespaces, using defaults:", err.message);
+    }
+    return FALLBACK_TALK_NAMESPACES;
+}
+
 function isNewTopic(change) {
     const tags = Array.isArray(change.tags) ? change.tags : [];
     if (tags.includes("discussiontools-reply")) return false;
@@ -114,12 +161,15 @@ function sectionNameFromSummary(change) {
     return decodeEntities(match[1]).replace(/\s+/g, " ").trim() || null;
 }
 
-function buildRecentChangesParams(state) {
+function buildRecentChangesParams(state, namespaces) {
+    const ids = Array.isArray(namespaces) && namespaces.length
+        ? namespaces
+        : FALLBACK_TALK_NAMESPACES;
     const params = new URLSearchParams({
         action: "query",
         list: "recentchanges",
         format: "json",
-        rcnamespace: String(TALK_NAMESPACE),
+        rcnamespace: ids.join("|"),
         rctype: "edit|new",
         rcprop: "title|ids|timestamp|user|comment|tags",
         rclimit: "500",
@@ -139,7 +189,8 @@ function buildRecentChangesParams(state) {
 }
 
 async function getNewTopicChanges(wikiConfig, state) {
-    const params = buildRecentChangesParams(state);
+    const namespaces = await getTalkNamespaces(wikiConfig);
+    const params = buildRecentChangesParams(state, namespaces);
 
     const res = await fetch(`${wikiConfig.apiEndpoint}?${params.toString()}`, {
         headers: { "User-Agent": getBotUserAgent() },
@@ -745,12 +796,13 @@ function startTalkWatch(client) {
     const intervalMs = TALK_CHECK_INTERVAL_MS || 5 * 60 * 1000;
     checkForNewTopics(client);
     setInterval(() => checkForNewTopics(client), intervalMs);
-    console.log(`talkWatch: watching Talk namespace every ${Math.round(intervalMs / 1000)}s.`);
+    console.log(`talkWatch: watching talk namespaces (except User talk and Blog talk) every ${Math.round(intervalMs / 1000)}s.`);
 }
 
 module.exports = {
     startTalkWatch,
     checkForNewTopics,
+    getTalkNamespaces,
     buildRecentChangesParams,
     isNewTopic,
     sectionNameFromSummary,
