@@ -1,11 +1,12 @@
-// Periodically watches the wiki's talk namespaces (except User talk and
-// Blog talk) for new topics and mirrors
+// Periodically watches the wiki's talk namespaces (except User talk, Blog talk
+// and User blog talk) for new topics and mirrors
 // only the opening post of each topic to a Discord channel.
 //
 // How it works:
 //   1. On bot ready (and then every TALK_CHECK_INTERVAL_MS), it asks the
 //      MediaWiki API for recent changes in every talk namespace (discovered
-//      from siteinfo, excluding User talk and Blog talk). Changes tagged
+//      from siteinfo, excluding User talk, Blog talk and User blog talk).
+//      Changes tagged
 //      `discussiontools-newtopic` — or whose edit summary is a "new section"
 //      summary — are new topics. Replies (`discussiontools-reply`) are ignored.
 //   2. Processed recent-change IDs are stored in a gitignored state file, so a
@@ -37,9 +38,10 @@ const {
 } = require("../config.js");
 
 // MediaWiki convention: even namespaces are subject pages, odd ones are their
-// talk pages. User talk (3) and Blog talk are deliberately excluded.
+// talk pages. User talk (3), Blog talk and User blog talk are deliberately
+// excluded.
 const EXCLUDED_TALK_NAMESPACES = new Set([3]);
-const EXCLUDED_TALK_NAMESPACE_NAMES = new Set(["blog talk"]);
+const EXCLUDED_TALK_NAMESPACE_NAMES = new Set(["blog talk", "user blog talk"]);
 const FALLBACK_TALK_NAMESPACES = [1, 5, 7, 9, 11, 13, 15];
 const NAMESPACE_CACHE_MS = 60 * 60 * 1000;
 let talkNamespacesCache = { ids: null, expiresAt: 0 };
@@ -796,7 +798,7 @@ function startTalkWatch(client) {
     const intervalMs = TALK_CHECK_INTERVAL_MS || 5 * 60 * 1000;
     checkForNewTopics(client);
     setInterval(() => checkForNewTopics(client), intervalMs);
-    console.log(`talkWatch: watching talk namespaces (except User talk and Blog talk) every ${Math.round(intervalMs / 1000)}s.`);
+    console.log(`talkWatch: watching talk namespaces (except User talk, Blog talk and User blog talk) every ${Math.round(intervalMs / 1000)}s.`);
 }
 
 module.exports = {

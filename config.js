@@ -68,8 +68,8 @@ const DELETION_CHECK_INTERVAL_MS = 30 * 60 * 1000;
 // Accepts "<@&role_id>" or a bare role ID; leave empty to disable.
 const DELETION_ROLE_PING = "<@&1570491422321148044>";
 
-// Posts newly created topics from all talk namespaces except User talk and
-// Blog talk to this Discord channel using a webhook,
+// Posts newly created topics from all talk namespaces except User talk,
+// Blog talk and User blog talk to this Discord channel using a webhook,
 // so each message appears under the topic author's name and profile avatar.
 const TALK_CHANNEL_ID = "1018420502286581817";
 const TALK_CHECK_INTERVAL_MS = 5 * 60 * 1000;

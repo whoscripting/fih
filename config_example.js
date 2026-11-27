@@ -61,7 +61,7 @@ const DELETION_CHECK_INTERVAL_MS = 5 * 60 * 1000;
 const DELETION_ROLE_PING = "";
 
 // Channel to post newly created topics from all talk namespaces except User
-// talk and Blog talk to (uses a webhook so
+// talk, Blog talk and User blog talk to (uses a webhook so
 // messages appear under the topic author's name and profile avatar).
 // Set to an empty value to disable the watcher.
 const TALK_CHANNEL_ID = "your_channel_id_here";
