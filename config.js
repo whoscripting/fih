@@ -44,9 +44,10 @@ const TRACKER = {
     distribution: {
         "1018420502286581812": [
             "2440500124", // DOORS
+            { universeId: "3833818265", ping: false },
         ],
     },
-    frequency: 1000000000,
+    frequency: 1000000,
     updateBatchWindowMs: 5 * 60 * 1000,
     updatePingAfterMs: 24 * 60 * 60 * 1000,
     intervalMs: 3 * 60 * 1000,
@@ -67,6 +68,11 @@ const DELETION_CHECK_INTERVAL_MS = 30 * 60 * 1000;
 // Optional role shown as a silent "-# <@&role>" subtext line below the heading in new candidate messages.
 // Accepts "<@&role_id>" or a bare role ID; leave empty to disable.
 const DELETION_ROLE_PING = "<@&1570491422321148044>";
+
+// Posts newly created Talk-namespace topics to this Discord channel using a webhook,
+// so each message appears under the topic author's name and profile avatar.
+const TALK_CHANNEL_ID = "1018420502286581817";
+const TALK_CHECK_INTERVAL_MS = 5 * 60 * 1000;
 
 const STATUS_INTERVAL_MS = 5 * 60 * 1000;
 const PAGE_CACHE_MS = 30 * 60 * 1000;
@@ -94,6 +100,8 @@ module.exports = {
     DELETION_CHANNEL_ID,
     DELETION_CHECK_INTERVAL_MS,
     DELETION_ROLE_PING,
+    TALK_CHANNEL_ID,
+    TALK_CHECK_INTERVAL_MS,
     STATUS_INTERVAL_MS,
     PAGE_CACHE_MS,
     NOT_FOUND_DELETE_MS,
