@@ -44,10 +44,9 @@ const TRACKER = {
     distribution: {
         "1018420502286581812": [
             "2440500124", // DOORS
-            { universeId: "3833818265", ping: false },
         ],
     },
-    frequency: 1000000,
+    frequency: 1000000000,
     updateBatchWindowMs: 5 * 60 * 1000,
     updatePingAfterMs: 24 * 60 * 60 * 1000,
     intervalMs: 3 * 60 * 1000,
