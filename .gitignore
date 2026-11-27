@@ -140,3 +140,4 @@ vite.config.ts.timestamp-*
 
 # Bot runtime state
 deletion-watch-state.json
+talk-watch-state.json

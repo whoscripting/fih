@@ -60,6 +60,8 @@ Most bot behavior is configured in [`config.js`](config.js). Restart the bot aft
 | `DELETION_CHANNEL_ID` | Channel the bot posts newly added candidates from `Category:Candidates_for_deletion` to. Accepts a text channel, or a forum channel (a dedicated "New pages for deletion" post is created/reused and notifications go there). Set to an empty value to disable the watcher. |
 | `DELETION_CHECK_INTERVAL_MS` | How often the deletion watcher checks the category. The default is five minutes. |
 | `DELETION_ROLE_PING` | Optional. When set (`<@&role_id>` or a bare role ID), new candidate messages include a silent `-# <@&role_id>` subtext line below the heading and are sent with notifications suppressed. Leave empty to disable. |
+| `TALK_CHANNEL_ID` | Channel the bot posts newly created Talk-namespace topics to. Messages are sent through a webhook with the topic author's name and wiki profile avatar. Set to an empty value to disable the watcher. |
+| `TALK_CHECK_INTERVAL_MS` | How often the talk watcher checks recent changes. The default is five minutes. |
 | `STATUS_OPTIONS` | Customizes the bot’s rotating Discord status messages and activity types. |
 | `STATUS_INTERVAL_MS` | Controls how often the bot rotates its status. The default is five minutes. |
 | `PAGE_CACHE_MS` | Controls how long page lookups stay cached in memory. The default is 30 minutes. |
@@ -133,6 +135,28 @@ Notes:
 - If `DELETION_CHANNEL_ID` points at a **forum channel**, the bot finds (or creates) a post titled `New pages for deletion` — with starter message `This post will notify future files that are candidates for deletion.` — and posts every notification into that post instead of the forum. The post's ID is stored in `deletion-watch-state.json` and it is also rediscovered by title if the state is lost. If the post is ever locked or archived, the bot unlocks and reopens it before posting.
 - If the forum channel requires tags, the post cannot be created — the log shows `deletionWatch: failed to create forum post: A tag is required to create a forum post in this channel`. To work around this: temporarily disable tag requirements (or make tags optional) for the forum channel, restart the server/bot so the post gets created on the next check, then re-enable tag requirements — the existing post keeps working without tags.
 - The bot account still needs permission to view and send messages in `DELETION_CHANNEL_ID`. Deleting the pages themselves is a manual action; the bot only links to `?action=delete`.
+
+## Talk page watcher
+
+`bot/talkWatch.js` watches the default wiki's Talk namespace (`Talk:`) for new topics. On startup and then every `TALK_CHECK_INTERVAL_MS` (five minutes by default), it checks recent changes for entries tagged `discussiontools-newtopic` (with a fallback to MediaWiki's standard `/* Section */ new section` summary). Replies are ignored. Processed change IDs are stored in `talk-watch-state.json` (gitignored), so each topic is announced once.
+
+Topics are posted to `TALK_CHANNEL_ID` through a webhook, which lets each message override the bot's name and avatar with the topic author's name and wiki profile avatar. A message looks like this:
+
+```
+## Section name
+hello!
+-# [Reply here](<https://doorsgame.wiki/wiki/Talk:Item_Skins#Section_name>) · <t:1795737694:F>
+```
+
+Notes:
+
+- The bot fetches the exact revision that created the topic, so replies added later are never included, even when the watcher is running behind. Only the opening post's section is read.
+- The date comes from the author's signature on the post and is converted to a Discord dynamic timestamp (`<t:unix:F>`), so each viewer sees it in their own timezone. MediaWiki's `HH:MM, D Month YYYY (TZ)` format, American formats (`November 20, 2026 1:13 PM`, `11/20/2026`), and ISO-style dates are supported, including named timezones and numeric offsets such as `(UTC+2)`. When there is no signature, the revision timestamp is used instead.
+- Wiki formatting (links, bold, italic) is converted to Discord markdown. Images in the post are fetched and attached with `AttachmentBuilder`: the wiki `alt=` value is used as the attachment description when present, otherwise the file name is used for both the description and `.setName()`. Up to ten images are attached.
+- Wiki text cannot ping anyone (`allowedMentions: { parse: [] }`), and overlong posts are truncated to stay under Discord's 2000 character limit.
+- The bot needs **Manage Webhooks** permission in `TALK_CHANNEL_ID` the first time it runs, so it can create the webhook. Its ID is saved in `talk-watch-state.json` and reused afterwards.
+- If `TALK_CHANNEL_ID` is a **forum channel**, notifications go into a dedicated `Talk page watcher` post (created or reused, and reopened if locked/archived) instead of the forum itself.
+- On the first run there is no state file, so every new topic currently in recent changes is announced at once. Later checks only announce topics seen after the previous check (with a one-minute overlap to avoid missing late-arriving changes).
 
 ## Web server and Instatus
 

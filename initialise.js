@@ -2,6 +2,7 @@ require("dotenv").config();
 
 const { setRandomStatus } = require("./bot/presence.js");
 const { startDeletionWatch } = require("./bot/deletionWatch.js");
+const { startTalkWatch } = require("./bot/talkWatch.js");
 const { commands } = require("./bot/commands.js");
 const { 
     handleInteraction,
@@ -56,6 +57,7 @@ client.once("ready", async () => {
     setRandomStatus(client);
     setInterval(() => { setRandomStatus(client); }, STATUS_INTERVAL_MS);
     startDeletionWatch(client);
+    startTalkWatch(client);
 
     try {
         console.log("Registering slash commands...");

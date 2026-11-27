@@ -60,6 +60,12 @@ const DELETION_CHECK_INTERVAL_MS = 5 * 60 * 1000;
 // Accepts "<@&role_id>" or a bare role ID; leave empty to disable.
 const DELETION_ROLE_PING = "";
 
+// Channel to post newly created Talk-namespace topics to (uses a webhook so
+// messages appear under the topic author's name and profile avatar).
+// Set to an empty value to disable the watcher.
+const TALK_CHANNEL_ID = "your_channel_id_here";
+const TALK_CHECK_INTERVAL_MS = 5 * 60 * 1000;
+
 const STATUS_INTERVAL_MS = 5 * 60 * 1000;
 const PAGE_CACHE_MS = 30 * 60 * 1000;
 const NOT_FOUND_DELETE_MS = 5000;
@@ -81,6 +87,8 @@ module.exports = {
     DELETION_CHANNEL_ID,
     DELETION_CHECK_INTERVAL_MS,
     DELETION_ROLE_PING,
+    TALK_CHANNEL_ID,
+    TALK_CHECK_INTERVAL_MS,
     STATUS_INTERVAL_MS,
     PAGE_CACHE_MS,
     NOT_FOUND_DELETE_MS,
