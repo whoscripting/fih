@@ -145,7 +145,7 @@ Topics are posted to `TALK_CHANNEL_ID` through a webhook, which lets each messag
 ```
 ## Section name
 hello!
--# [Reply here](<https://doorsgame.wiki/wiki/Talk:Item_Skins#Section_name>) · <t:1795737694:F>
+-# [Reply here](<https://doorsgame.wiki/wiki/Talk:Item_Skins#Section_name>) · [Item Skins](<https://doorsgame.wiki/wiki/Talk:Item_Skins>) · <t:1795737694:F>
 ```
 
 Notes:

@@ -123,15 +123,18 @@ function buildRecentChangesParams(state) {
         rctype: "edit|new",
         rcprop: "title|ids|timestamp|user|comment|tags",
         rclimit: "500",
-        rcdir: "older",
     });
-    if (state.fresh) {
-        // No state file yet: only consider topics created in the last 15 minutes.
-        params.set("rcstart", new Date(Date.now() - FRESH_DEPLOYMENT_WINDOW_MS).toISOString());
-    } else if (state.lastCheck) {
+
+    // rcstart is the LOWER bound: with rcdir=newer, MediaWiki returns changes
+    // from rcstart up to now. Using rcdir=older here would walk backwards from
+    // that bound into months-old history instead of the recent window.
+    let startMs = Date.now() - FRESH_DEPLOYMENT_WINDOW_MS;
+    if (!state.fresh) {
         const last = Date.parse(state.lastCheck);
-        if (Number.isFinite(last)) params.set("rcstart", new Date(last - OVERLAP_MS).toISOString());
+        if (Number.isFinite(last)) startMs = last - OVERLAP_MS;
     }
+    params.set("rcstart", new Date(startMs).toISOString());
+    params.set("rcdir", "newer");
     return params;
 }
 
@@ -621,11 +624,12 @@ async function resolveWebhook(client, channel, state) {
 
 // --- MESSAGE BUILDING ---
 
-function buildMessage({ sectionName, body, unix, sectionUrl }) {
+function buildMessage({ sectionName, body, unix, sectionUrl, pageLabel, talkPageUrl }) {
     const header = `## ${sectionName}\n`;
-    const footer = unix
-        ? `\n-# [Reply here](<${sectionUrl}>) · <t:${unix}:F>`
-        : `\n-# [Reply here](<${sectionUrl}>)`;
+    const parts = [`[Reply here](<${sectionUrl}>)`];
+    if (pageLabel && talkPageUrl) parts.push(`[${pageLabel}](<${talkPageUrl}>)`);
+    if (unix) parts.push(`<t:${unix}:F>`);
+    const footer = `\n-# ${parts.join(" · ")}`;
     const maxBody = Math.max(0, MAX_MESSAGE_LENGTH - header.length - footer.length - 3);
     let content = body;
     if (content.length > maxBody) {
@@ -642,6 +646,15 @@ function sectionUrl(pageTitle, sectionName, wikiConfig) {
     const page = encodeURI(pageTitle.replace(/ /g, "_"));
     const anchor = encodeURIComponent(sectionName.replace(/ /g, "_"));
     return `${wikiConfig.articlePath}wiki/${page}#${anchor}`;
+}
+
+function talkPageUrl(pageTitle, wikiConfig) {
+    return `${wikiConfig.articlePath}wiki/${encodeURI(pageTitle.replace(/ /g, "_"))}`;
+}
+
+function displayPageName(pageTitle) {
+    const title = String(pageTitle || "");
+    return title.replace(/^Talk\s*:/i, "").trim() || title;
 }
 
 // --- MAIN CHECK ---
@@ -701,6 +714,8 @@ async function checkForNewTopics(client) {
                     body: text,
                     unix,
                     sectionUrl: sectionUrl(change.title, sectionName, wikiConfig),
+                    pageLabel: displayPageName(change.title),
+                    talkPageUrl: talkPageUrl(change.title, wikiConfig),
                 }),
                 username: discordUsername(author),
                 ...(profile?.avatarUrl ? { avatarURL: profile.avatarUrl } : {}),
@@ -744,4 +759,5 @@ module.exports = {
     parseSignatureTimestamp,
     wikitextToDiscord,
     buildMessage,
+    displayPageName,
 };
